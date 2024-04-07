@@ -9,6 +9,18 @@ from langchain.vectorstores.chroma import Chroma
 from langchain.prompts import ChatPromptTemplate
 from langchain.chat_models import ChatOpenAI
 from datetime import datetime
+import io
+from openai import OpenAI
+
+import streamlit as st
+import pandas as pd
+import os
+import time
+import tempfile
+import requests
+import csv
+import json
+from PIL import Image
 __import__('pysqlite3')
 import sys
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
@@ -58,8 +70,6 @@ def run_research_assistant_chatbot():
 
     if "openai_model" not in st.session_state:
         st.session_state["openai_model"] = "gpt-3.5-turbo"
-
-
     
     def load_chat_history():
         with shelve.open("chat_history") as db:
@@ -86,148 +96,7 @@ def run_research_assistant_chatbot():
 
         def __call__(self, input):
             return self._embed_documents(input)
-    def formulate_response(prompt):
-        citations = ""
-        openai_api_key = st.secrets["OPENAI_API_KEY"]
-        embedding_function = CustomOpenAIEmbeddings(openai_api_key=openai_api_key)
-        db = Chroma(persist_directory=CHROMA_PATH, embedding_function=embedding_function)
-        chat_history = "\n".join([msg["content"] for msg in st.session_state.messages if msg["role"] == "user"])
-        prompt_with_history = f"Previous conversation:\n{chat_history}\n\nYour question: {prompt}"
-        results = db.similarity_search_with_relevance_scores(prompt_with_history, k=3)
-        with st.spinner("Thinking..."):
-            if len(results) == 0 or results[0][1] < 0.85:
-                model = ChatOpenAI(openai_api_key=openai_api_key, model_name="gpt-3.5-turbo-0125")
-                # query the assistant here instead
-                response_text = model.predict(prompt_with_history)      
-                
 
-                response = f" {response_text}"
-                follow_up_results = db.similarity_search_with_relevance_scores(response_text, k=3)
-                very_strong_correlation_threshold = 0.7
-                high_scoring_results = [result for result in follow_up_results if result[1] >= very_strong_correlation_threshold]
-                if high_scoring_results:
-                    sources = []
-                    combined_texts = []
-                    for i, (doc, _score) in enumerate(high_scoring_results):
-                        doc_content = doc.page_content
-                        first_author = doc.metadata['authors'].split(',')[0] if 'authors' in doc.metadata and doc.metadata['authors'] else "Unknown"
-                        citation_key = f"({first_author} et al., {doc.metadata.get('year', 'Unknown')})"
-                        combined_texts.append(f"{doc_content} {citation_key}")
-                        source_info = (
-                            f"\n🦠 {doc.metadata.get('authors', 'Unknown')}\n"
-                            f"({doc.metadata.get('year', 'Unknown')}),\n"
-                            f"\"{doc.metadata['title']}\",\n"
-                            f"PMID: {doc.metadata.get('pub_id', 'N/A')},\n"
-                            f"Available at: {doc.metadata.get('url', 'N/A')},\n"
-                            f"Accessed on: {datetime.today().strftime('%Y-%m-%d')}\n"
-                        )
-                        sources.append(source_info)
-                    combined_input = " ".join(combined_texts)
-                    # query_for_llm = f"{combined_input} Answer the question with citation to the paragraphs. For every sentence you write, cite the book name and paragraph number as (author, year). At the end of your commentary, suggest a further question that can be answered by the paragraphs provided."
-                    query_for_llm = (
-                        f"Answer the question with citations to each sentence:\n{combined_input}\n\n"
-                        f"Question: {prompt}\n\n"
-                        "Please answer the question directly with a lot of extra detail, citing relevant sections (author, year) for support. Everything that is taken word for word from a source should be in quotation marks."
-                        f"At the end, Suggest a further question/experiment that relates, and cite them as (author, year): {combined_input}"
-                    )
-
-                    response = f" {response_text}"
-                    
-                    integrated_response = model.predict(query_for_llm)
-                    sources_formatted = "\n".join(sources) 
-                    citations = sources_formatted
-                    
-                    response = f" {integrated_response}\n"
-            else:
-                context_texts = []
-                sources = []
-                for doc, _score in results:
-                    source_info = (
-                        f"\n🦠 {doc.metadata.get('authors', 'Unknown')}\n"
-                        f"({doc.metadata.get('year', 'Unknown')}),\n"
-                        f"\"{doc.metadata['title']}\",\n"
-                        f"PMID: {doc.metadata.get('pub_id', 'N/A')},\n"
-                        f"Available at: {doc.metadata.get('url', 'N/A')},\n"
-                        f"Accessed on: {datetime.today().strftime('%Y-%m-%d')}\n"
-                    )
-                    sources.append(source_info)
-                context_text = "\n\n---\n\n".join(context_texts)
-                prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
-                formatted_prompt = prompt_template.format(context=context_text, question=prompt_with_history)
-                model = ChatOpenAI(openai_api_key=openai_api_key, model_name="gpt-3.5-turbo-0125")
-                response_text = model.predict(formatted_prompt)
-                sources_formatted = "\n\n".join(sources)
-                citations = sources_formatted    
-                response = f" {response_text}\n"
-                
-        if citations:
-            st.session_state.messages.append({"role": "assistant", "content": response, "citations": citations})
-        else:
-            st.session_state.messages.append({"role": "assistant", "content": response})
-        
-        display_messages()
-
-
-
-    def typewriter(container, text: str, speed: int):
-        """Display text with a typewriter effect, preserving newline characters."""
-        lines = text.split('\n')
-        curr_full_text = ''
-        
-        for line in lines:
-            tokens = line.split()
-            for index in range(len(tokens) + 1):
-                curr_line = " ".join(tokens[:index])
-                curr_full_text_with_line = f"{curr_full_text}\n{curr_line}" if curr_full_text else curr_line
-                container.markdown(curr_full_text_with_line, unsafe_allow_html=True)
-                time.sleep(1 / speed)
-            curr_full_text += f"{line}\n"
-
-    def display_messages():
-        """Function to display all messages in the chat history and show citations for the last response."""
-        total_messages = len(st.session_state.messages)
-        for index, message in enumerate(st.session_state.messages):
-            avatar = "🧬" if message["role"] == "user" else "🤖"
-            text = f"{avatar} {message['content']}"
-            
-            if message["role"] == "user":
-                st.markdown(text, unsafe_allow_html=True)
-            else:
-                container = st.empty()
-                if index == total_messages - 1:
-                    typewriter(container, text, speed=50)
-                else:
-                    container.markdown(text, unsafe_allow_html=True)
-            if "citations" in message and message["citations"]:
-                citations_button_label = "Show Citations"
-                with st.expander(citations_button_label):
-                    st.markdown(message["citations"], unsafe_allow_html=True)
-
-
-    user_prompt = st.chat_input("How can I help?")
-
-    if user_prompt:
-        st.session_state.messages.append({"role": "user", "content": user_prompt})
-        formulate_response(user_prompt)
-
-    save_chat_history(st.session_state.messages)
-
-
-
-
-
-import io
-from openai import OpenAI
-
-import streamlit as st
-import pandas as pd
-import os
-import time
-import tempfile
-import requests
-import csv
-import json
-from PIL import Image
 def run_data_analysis_chatbot():
     st.title("Lab Assistant 📊")
     class CustomOpenAIEmbeddings(OpenAIEmbeddings):
@@ -381,10 +250,6 @@ def run_data_analysis_chatbot():
 
     def chat_prompt(client, assistant_option):
         if prompt := st.chat_input("Enter your message here"):
-            st.title("Research Assistant 🔬")
-            st.caption('Analyse your experimental data')
-            st.markdown('Your personal Data Anaylist tool ')
-            st.divider()
 
             CHROMA_PATH = "chroma"
             PROMPT_TEMPLATE = """
@@ -545,13 +410,13 @@ def run_data_analysis_chatbot():
                             st.markdown(message["citations"], unsafe_allow_html=True)
 
 
-            user_prompt = st.chat_input("How can I help?")
+            # user_prompt = st.chat_input("How can I help?")
 
-            if user_prompt:
-                st.session_state.messages.append({"role": "user", "content": user_prompt})
-                formulate_response(user_prompt)
+            # if user_prompt:
+            #     st.session_state.messages.append({"role": "user", "content": user_prompt})
+            #     formulate_response(user_prompt)
 
-            save_chat_history(st.session_state.messages)
+            # save_chat_history(st.session_state.messages)
 
             # Updating the assistant's configuration
             st.session_state.current_assistant = client.beta.assistants.update(
