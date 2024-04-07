@@ -33,7 +33,7 @@ def handle_function(run):
             arguments_str = each_tool.function.arguments
             arguments_dict = json.loads(arguments_str)
             symbol = arguments_dict['symbol']
-            st.sidebar.write('get stock price for ', symbol)
+            # st.sidebar.write('get stock price for ', symbol)
 
             output = getStockPrice(symbol)
             tools_output_array.append({"tool_call_id": tool_call_id, "output": output})
@@ -66,21 +66,21 @@ st.set_page_config(page_title="Smart Investment Advisor", page_icon=":moneybag:"
 st.header(":moneybag: Smart Investment Advisor")
 
 #Get the OPENAI API Key
-openai_api_key_env = st.secrets['OPENAI_API_KEY']
-openai_api_key = st.sidebar.text_input(
-    'OpenAI API Key', placeholder='sk-', value=openai_api_key_env)
-url = "https://platform.openai.com/account/api-keys"
-st.sidebar.markdown("Get an Open AI Access Key [here](%s). " % url)
+openai_api_key = st.secrets['OPENAI_API_KEY']
+# openai_api_key = st.sidebar.text_input(
+#     'OpenAI API Key', placeholder='sk-', value=openai_api_key_env)
+# url = "https://platform.openai.com/account/api-keys"
+# st.sidebar.markdown("Get an Open AI Access Key [here](%s). " % url)
 if openai_api_key:
     openai.api_key = openai_api_key
 
 # Button to start the chat session
-if st.sidebar.button("Start Chat"):
-    st.session_state.start_chat = True
-    # Create a thread once and store its ID in session state
-    thread = client.beta.threads.create()
-    st.session_state.thread_id = thread.id
-    st.write("thread id: ", thread.id)
+
+st.session_state.start_chat = True
+# Create a thread once and store its ID in session state
+thread = client.beta.threads.create()
+st.session_state.thread_id = thread.id
+    # st.write("thread id: ", thread.id)
 
 # Define the function to process messages with citations
 def process_message_with_citations(message):
@@ -121,7 +121,7 @@ if st.session_state.start_chat:
 
         # Poll for the run to complete and retrieve the assistant's messages
         while run.status not in ["completed", "failed"]:
-            st.sidebar.write(run.status)
+            # st.sidebar.write(run.status)
             if run.status == "requires_action":
                 handle_function(run)
             time.sleep(1)
@@ -129,7 +129,7 @@ if st.session_state.start_chat:
                 thread_id=st.session_state.thread_id,
                 run_id=run.id
             )
-        st.sidebar.write(run.status)
+        # st.sidebar.write(run.status)
 
         # Retrieve messages added by the assistant
         messages = client.beta.threads.messages.list(
