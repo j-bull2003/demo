@@ -46,7 +46,7 @@ def handle_function(run):
 
 
 # Set your OpenAI Assistant ID here
-assistant_id = os.getenv('ASSISTANT_ID')
+assistant_id = st.secrets['ASSISTANT_ID']
 
 # Initialize the OpenAI client (ensure to set your API key in the sidebar within the app)
 client = openai
@@ -66,7 +66,7 @@ st.set_page_config(page_title="Smart Investment Advisor", page_icon=":moneybag:"
 st.header(":moneybag: Smart Investment Advisor")
 
 #Get the OPENAI API Key
-openai_api_key_env = os.getenv('OPENAI_API_KEY')
+openai_api_key_env = st.secrets['OPENAI_API_KEY']
 openai_api_key = st.sidebar.text_input(
     'OpenAI API Key', placeholder='sk-', value=openai_api_key_env)
 url = "https://platform.openai.com/account/api-keys"
