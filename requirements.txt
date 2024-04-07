@@ -1,0 +1,10 @@
+streamlit
+python-dotenv
+langchain-community
+langchain
+langchain-core
+langchain-text-splitters
+chromadb
+pysqlite3-binary
+tiktoken
+openai==1.2.2
