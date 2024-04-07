@@ -7,6 +7,7 @@ __pycache__/
 .env
 # Distribution / packaging
 .Python
+chroma/
 env/
 build/
 develop-eggs/
